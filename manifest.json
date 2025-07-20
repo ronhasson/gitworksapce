@@ -1,0 +1,145 @@
+{
+  "dxt_version": "0.1",
+  "name": "Git Workspace",
+  "version": "1.0.0",
+  "description": "Intelligent file operations and Git read-only access for AI assistants. Prevents file corruption through guided workflows and provides performance-optimized workspace management.",
+  "author": {
+    "name": "Ron Hasson",
+    "email": "ron@example.com"
+  },
+  "homepage": "https://github.com/ronhasson/gitworksapce",
+  "repository": "https://github.com/ronhasson/gitworksapce",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "PROJECT_DIRECTORY": "${user_config.project_directory}"
+      }
+    }
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Read file contents with line numbers - ALWAYS use this before editing any file to prevent line number guessing"
+    },
+    {
+      "name": "preview_edit",
+      "description": "Preview what an edit would do before applying it - Essential safety tool to prevent file corruption"
+    },
+    {
+      "name": "edit_file", 
+      "description": "Edit specific lines in a file - Use after read_file and preview_edit to safely modify files"
+    },
+    {
+      "name": "write_file",
+      "description": "Write complete file content (overwrites existing) - Use for new files or complete rewrites"
+    },
+    {
+      "name": "append_to_file",
+      "description": "Add content to the end of a file - Useful for adding new code without replacing existing content"
+    },
+    {
+      "name": "list_files",
+      "description": "List files and directories in the workspace - Explore project structure with size information"
+    },
+    {
+      "name": "git_status",
+      "description": "Show Git working tree status - displays modified, staged, and untracked files"
+    },
+    {
+      "name": "git_diff", 
+      "description": "Show Git diff for files or all changes - view differences in working tree or staged changes"
+    },
+    {
+      "name": "git_log",
+      "description": "Show Git commit history - View project development history with customizable format"
+    },
+    {
+      "name": "git_compare_branches",
+      "description": "Compare changes between Git branches - Understand differences between branch versions"
+    },
+    {
+      "name": "search_content",
+      "description": "Search for text within files - Fast content search across the entire codebase"
+    },
+    {
+      "name": "get_project_structure",
+      "description": "Get tree-style project overview - Understand codebase organization and file hierarchy"
+    },
+    {
+      "name": "find_files",
+      "description": "Search for files by name pattern - Fast file discovery using intelligent indexing with wildcards"
+    },
+    {
+      "name": "refresh_file_index",
+      "description": "Rebuild file index - Update the internal file cache to include newly created files"
+    }
+  ],
+    },
+    {
+      "name": "preview_edit",
+      "description": "Preview what an edit would do before applying it - Essential safety tool to prevent file corruption"
+    },
+    {
+      "name": "edit_file", 
+      "description": "Edit specific lines in a file - Use after read_file and preview_edit to safely modify files"
+    },
+    {
+      "name": "write_file",
+      "description": "Write complete file content (overwrites existing) - Use for new files or complete rewrites"
+    },
+    {
+      "name": "git_status",
+      "description": "Show Git working tree status - displays modified, staged, and untracked files"
+    },
+    {
+      "name": "git_diff", 
+      "description": "Show Git diff for files or all changes - view differences in working tree or staged changes"
+    },
+    {
+      "name": "find_files",
+      "description": "Search for files by name pattern - fast file discovery using intelligent indexing"
+    }
+  ],
+  "user_config": {
+    "project_directory": {
+      "type": "directory",
+      "title": "Project Directory", 
+      "description": "The root directory of your Git-powered project that the AI assistant will have access to",
+      "required": true,
+      "sensitive": false,
+      "default": "${HOME}/Projects"
+    }
+  },
+  "features": [
+    "Intelligent file editing workflow that prevents line number guessing",
+    "Performance-optimized file indexing with smart directory filtering", 
+    "Read-only Git operations for safe repository analysis",
+    "Automatic backup and corruption protection during file edits",
+    "Comprehensive error handling with recovery guidance",
+    "Cross-platform compatibility (Windows, macOS, Linux)"
+  ],
+  "security": {
+    "file_access": "restricted_to_configured_directory",
+    "git_operations": "read_only",
+    "path_validation": "prevents_directory_traversal"
+  },
+  "keywords": [
+    "git",
+    "filesystem", 
+    "workspace",
+    "code",
+    "editing",
+    "file-operations",
+    "version-control",
+    "development-tools"
+  ],
+  "license": "MIT",
+  "min_claude_desktop_version": "0.1.0",
+  "compatible_platforms": ["win32", "darwin", "linux"]
+}
