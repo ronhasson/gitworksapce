@@ -1,59 +1,49 @@
 {
   "name": "git-workspace-mcp-extension",
   "version": "1.0.0",
-  "description": "Git Workspace MCP Extension - Provides intelligent file operations and Git read-only access for AI assistants",
-  "type": "module",
+  "description": "Intelligent Git workspace management with AI-guided file operations",
   "main": "server/index.js",
-  "bin": {
-    "git-workspace-mcp": "server/index.js"
-  },
-  "files": [
-    "server/",
-    "manifest.json"
-  ],
+  "type": "module",
   "scripts": {
-  "scripts": {
-    "install-deps": "echo '🚀 Installing Git Workspace MCP Extension dependencies...' && npm install",
-    "build": "echo '🔨 Building extension...' && npm run validate && echo '✅ Build complete!'",
-    "validate": "echo '🔍 Validating manifest.json...' && node -e \"JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('✅ Manifest is valid JSON')\"",
-    "dev": "echo '🚀 Starting development server...' && node server/index.js",
-    "validate": "echo '🔍 Validating extension...' && node validate.js",
-    "dev": "echo '🚀 Starting development server...' && node server/index.js",
-    "inspect": "echo '🔍 Starting MCP Inspector...' && npx @modelcontextprotocol/inspector node server/index.js",
-    "package": "echo '📦 Creating DXT package...' && npm run validate && zip -r git-workspace-v1.0.0.dxt manifest.json server/ node_modules/ package.json README.md LICENSE icon.svg CHANGELOG.md",
-    "package-win": "echo '📦 Creating DXT package...' && npm run validate && powershell -Command \"Compress-Archive -Path 'manifest.json','server','node_modules','package.json','README.md','LICENSE','icon.svg','CHANGELOG.md' -DestinationPath 'git-workspace-v1.0.0.dxt' -Force\"",
-    "test": "npm run validate",
-    "clean": "echo '🧹 Cleaning build artifacts...' && rm -f *.dxt"
-    "help": "echo '📚 Available commands:' && echo '  npm run install-deps - Install dependencies' && echo '  npm run build        - Build extension' && echo '  npm run package      - Create .dxt file (Unix/macOS)' && echo '  npm run package-win  - Create .dxt file (Windows)' && echo '  npm run inspect      - Debug with MCP inspector' && echo '  npm run dev          - Run development server' && echo '  npm run setup        - Run installation script (Unix/macOS)' && echo '  npm run setup-win    - Run installation script (Windows)'"
-  },
-    "dev": "node server/index.js",
+    "start": "node server/index.js",
+    "test": "echo \"No tests yet\" && exit 0",
+    "dev": "node --inspect server/index.js",
+    "build": "echo \"No build process required for pure Node.js extension\"",
+    "validate": "node --input-type=module -e \"import {readFileSync} from 'fs'; JSON.parse(readFileSync('manifest.json', 'utf8')); console.log('✅ Manifest is valid JSON');\"",
+    "package": "zip -r git-workspace-v1.0.0.dxt . -x 'node_modules/*' '.git/*' '*.dxt'",
+    "package-win": "powershell -Command \"Compress-Archive -Path 'manifest.json','server','package.json','README.md','LICENSE','icon.svg' -DestinationPath 'git-workspace-v1.0.0.dxt' -Force\"",
+    "clean": "rm -f *.dxt",
     "inspect": "npx @modelcontextprotocol/inspector node server/index.js",
-    "prepare": "npm run build",
-    "watch": "tsc --watch"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
-    "zod": "^3.22.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.8.0"
+    "help": "echo '📚 Available commands:' && echo '  npm run start        - Start the MCP server' && echo '  npm run dev          - Start with debugging' && echo '  npm run validate     - Validate manifest.json' && echo '  npm run package      - Create .dxt file (Unix/macOS)' && echo '  npm run package-win  - Create .dxt file (Windows)' && echo '  npm run inspect      - Debug with MCP inspector' && echo '  npm run clean        - Remove .dxt files'"
   },
   "keywords": [
     "mcp",
     "git",
+    "workspace", 
     "filesystem",
-    "workspace",
-    "claude",
-    "desktop-extension",
-    "dxt"
+    "ai",
+    "development",
+    "productivity"
   ],
-  "license": "MIT",
   "author": {
     "name": "Ron Hasson"
   },
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "diff": "^5.1.0",
+    "minimatch": "^9.0.3"
+  },
+  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/ronhasson/gitworksapce"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/ronhasson/gitworksapce/issues"
+  },
+  "homepage": "https://github.com/ronhasson/gitworksapce"
 }

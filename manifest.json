@@ -1,119 +1,75 @@
 {
   "dxt_version": "0.1",
   "name": "Git Workspace",
+  "display_name": "Git Workspace MCP Server",
   "version": "1.0.0",
-  "description": "Intelligent file operations and Git read-only access for AI assistants. Prevents file corruption through guided workflows and provides performance-optimized workspace management.",
+  "description": "Intelligent Git workspace management with AI-guided file operations, read-only Git integration, and performance-optimized file indexing.",
+  "long_description": "A comprehensive MCP server that provides AI assistants with secure, intelligent access to Git repositories. Features include atomic file operations, intelligent workflow guidance, fast file indexing, read-only Git operations, and comprehensive security validation. Designed to prevent file corruption and guide LLMs toward safe editing practices while maintaining high performance even on large projects.",
   "author": {
     "name": "Ron Hasson",
     "email": "ron@example.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ronhasson/gitworksapce"
+  },
   "homepage": "https://github.com/ronhasson/gitworksapce",
-  "repository": "https://github.com/ronhasson/gitworksapce",
-  "icon": "icon.png",
+  "icon": "icon.svg",
+  "keywords": ["git", "workspace", "filesystem", "mcp", "ai", "development", "productivity"],
+  "license": "MIT",
+  "min_claude_desktop_version": "0.1.0",
+  "compatible_platforms": ["win32", "darwin", "linux"],
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=16.0.0"
+    }
+  },
   "server": {
     "type": "node",
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": [
-        "${__dirname}/server/index.js"
-      ],
+      "args": ["${__dirname}/server/index.js"],
       "env": {
-        "PROJECT_DIRECTORY": "${user_config.project_directory}"
+        "WORKSPACE_PATH": "${user_config.workspace_path}",
+        "ENABLE_FILE_INDEXING": "${user_config.enable_file_indexing}",
+        "MAX_FILE_SIZE_MB": "${user_config.max_file_size_mb}",
+        "DEBUG_MODE": "${user_config.debug_mode}"
       }
     }
-  "tools": [
-    {
-      "name": "read_file",
-      "description": "Read file contents with line numbers - ALWAYS use this before editing any file to prevent line number guessing"
-    },
-    {
-      "name": "preview_edit",
-      "description": "Preview what an edit would do before applying it - Essential safety tool to prevent file corruption"
-    },
-    {
-      "name": "edit_file", 
-      "description": "Edit specific lines in a file - Use after read_file and preview_edit to safely modify files"
-    },
-    {
-      "name": "write_file",
-      "description": "Write complete file content (overwrites existing) - Use for new files or complete rewrites"
-    },
-    {
-      "name": "append_to_file",
-      "description": "Add content to the end of a file - Useful for adding new code without replacing existing content"
-    },
-    {
-      "name": "list_files",
-      "description": "List files and directories in the workspace - Explore project structure with size information"
-    },
-    {
-      "name": "git_status",
-      "description": "Show Git working tree status - displays modified, staged, and untracked files"
-    },
-    {
-      "name": "git_diff", 
-      "description": "Show Git diff for files or all changes - view differences in working tree or staged changes"
-    },
-    {
-      "name": "git_log",
-      "description": "Show Git commit history - View project development history with customizable format"
-    },
-    {
-      "name": "git_compare_branches",
-      "description": "Compare changes between Git branches - Understand differences between branch versions"
-    },
-    {
-      "name": "search_content",
-      "description": "Search for text within files - Fast content search across the entire codebase"
-    },
-    {
-      "name": "get_project_structure",
-      "description": "Get tree-style project overview - Understand codebase organization and file hierarchy"
-    },
-    {
-      "name": "find_files",
-      "description": "Search for files by name pattern - Fast file discovery using intelligent indexing with wildcards"
-    },
-    {
-      "name": "refresh_file_index",
-      "description": "Rebuild file index - Update the internal file cache to include newly created files"
-    }
-  ],
-    },
-    {
-      "name": "preview_edit",
-      "description": "Preview what an edit would do before applying it - Essential safety tool to prevent file corruption"
-    },
-    {
-      "name": "edit_file", 
-      "description": "Edit specific lines in a file - Use after read_file and preview_edit to safely modify files"
-    },
-    {
-      "name": "write_file",
-      "description": "Write complete file content (overwrites existing) - Use for new files or complete rewrites"
-    },
-    {
-      "name": "git_status",
-      "description": "Show Git working tree status - displays modified, staged, and untracked files"
-    },
-    {
-      "name": "git_diff", 
-      "description": "Show Git diff for files or all changes - view differences in working tree or staged changes"
-    },
-    {
-      "name": "find_files",
-      "description": "Search for files by name pattern - fast file discovery using intelligent indexing"
-    }
-  ],
+  },
   "user_config": {
-    "project_directory": {
+    "workspace_path": {
       "type": "directory",
-      "title": "Project Directory", 
-      "description": "The root directory of your Git-powered project that the AI assistant will have access to",
+      "title": "Git Workspace Directory",
+      "description": "Select the root directory of your Git repository. This should contain a .git folder and be the main project directory you want to work with.",
       "required": true,
-      "sensitive": false,
-      "default": "${HOME}/Projects"
+      "default": ["${HOME}/Projects"]
+    },
+    "enable_file_indexing": {
+      "type": "boolean",
+      "title": "Enable Fast File Indexing",
+      "description": "Build an index of all files for faster searching. Recommended for large projects. May take a few seconds on first run.",
+      "default": true,
+      "required": false
+    },
+    "max_file_size_mb": {
+      "type": "number",
+      "title": "Maximum File Size (MB)",
+      "description": "Maximum file size to process. Files larger than this will be skipped to prevent performance issues.",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "required": false
+    },
+    "debug_mode": {
+      "type": "boolean", 
+      "title": "Enable Debug Logging",
+      "description": "Enable detailed logging for troubleshooting. Only enable when debugging issues.",
+      "default": false,
+      "required": false
     }
   },
   "features": [
@@ -129,17 +85,111 @@
     "git_operations": "read_only",
     "path_validation": "prevents_directory_traversal"
   },
-  "keywords": [
-    "git",
-    "filesystem", 
-    "workspace",
-    "code",
-    "editing",
-    "file-operations",
-    "version-control",
-    "development-tools"
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Read file contents with workflow guidance"
+    },
+    {
+      "name": "write_file", 
+      "description": "Write file with atomic operations and corruption protection"
+    },
+    {
+      "name": "edit_file",
+      "description": "Edit file lines with diff preview and verification"
+    },
+    {
+      "name": "preview_edit",
+      "description": "Preview file changes before applying them"
+    },
+    {
+      "name": "append_to_file",
+      "description": "Append content to file"
+    },
+    {
+      "name": "replace_in_file", 
+      "description": "Find and replace text in files"
+    },
+    {
+      "name": "list_files",
+      "description": "List files and directories"
+    },
+    {
+      "name": "create_directory",
+      "description": "Create directories"
+    },
+    {
+      "name": "delete_file",
+      "description": "Delete files and directories"
+    },
+    {
+      "name": "git_status",
+      "description": "Show Git working tree status"
+    },
+    {
+      "name": "git_diff",
+      "description": "Show Git differences"
+    },
+    {
+      "name": "git_log",
+      "description": "Show Git commit history"
+    },
+    {
+      "name": "git_list_branches",
+      "description": "List Git branches"
+    },
+    {
+      "name": "git_compare_branches",
+      "description": "Compare Git branches"
+    },
+    {
+      "name": "git_compare_commits",
+      "description": "Compare Git commits"
+    },
+    {
+      "name": "git_show_commit",
+      "description": "Show Git commit details"
+    },
+    {
+      "name": "git_current_branch",
+      "description": "Show current Git branch"
+    },
+    {
+      "name": "git_branch_history", 
+      "description": "Show Git branch history"
+    },
+    {
+      "name": "fast_find_file",
+      "description": "Fast file search using index"
+    },
+    {
+      "name": "find_files",
+      "description": "Pattern-based file search"
+    },
+    {
+      "name": "search_content",
+      "description": "Search text content in files"
+    },
+    {
+      "name": "get_project_structure",
+      "description": "Get project directory tree"
+    },
+    {
+      "name": "analyze_code_quality",
+      "description": "Analyze code quality metrics"
+    },
+    {
+      "name": "find_todos_fixmes",
+      "description": "Find TODO/FIXME comments"
+    },
+    {
+      "name": "refresh_file_index",
+      "description": "Rebuild file index"
+    },
+    {
+      "name": "file_index_stats",
+      "description": "Show file index statistics"
+    }
   ],
-  "license": "MIT",
-  "min_claude_desktop_version": "0.1.0",
-  "compatible_platforms": ["win32", "darwin", "linux"]
+  "tools_generated": false
 }
