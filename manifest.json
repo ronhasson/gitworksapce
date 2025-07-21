@@ -17,10 +17,8 @@
   "icon": "icon.svg",
   "keywords": ["git", "workspace", "filesystem", "mcp", "ai", "development", "productivity"],
   "license": "MIT",
-  "min_claude_desktop_version": "0.1.0",
-  "compatible_platforms": ["win32", "darwin", "linux"],
   "compatibility": {
-    "claude_desktop": ">=1.0.0",
+    "claude_desktop": ">=0.12.0",
     "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "node": ">=16.0.0"

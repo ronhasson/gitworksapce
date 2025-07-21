@@ -1,5 +1,26 @@
 #!/usr/bin/env node
 
+// Enhanced startup logging and error handling
+console.error('🚀 Starting Git Workspace MCP Server...');
+console.error(`📋 Node.js version: ${process.version}`);
+console.error(`📋 Platform: ${process.platform}`);
+console.error(`📋 Architecture: ${process.arch}`);
+
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Promise Rejection:', reason);
+  console.error('Promise:', promise);
+  process.exit(1);
+});
+
+// Catch uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
+console.error('📦 Loading dependencies...');
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -15,13 +36,15 @@ import { spawn } from 'child_process';
 import { minimatch } from 'minimatch';
 import { diffLines, createTwoFilesPatch } from 'diff';
 
+console.error('✅ Dependencies loaded successfully');
+
 // Configuration from environment variables
 const WORKSPACE_PATH = process.env.WORKSPACE_PATH || process.cwd();
 const ENABLE_FILE_INDEXING = process.env.ENABLE_FILE_INDEXING !== 'false';
 const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '10');
 const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
 
-// Performance-critical constants
+// Performance-critical constants  
 const SKIP_DIRS = new Set([
   // Dependencies
   'node_modules', 'vendor', 'venv', 'env',
@@ -242,7 +265,7 @@ async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
   };
 }
 
-// Memory-efficient tail file reading (from index.ts)
+// Memory-efficient tail file reading
 async function tailFile(filePath, numLines) {
   const CHUNK_SIZE = 1024; // Read 1KB at a time
   const stats = await fs.stat(filePath);
@@ -294,7 +317,7 @@ async function tailFile(filePath, numLines) {
   }
 }
 
-// Memory-efficient head file reading (from index.ts)
+// Memory-efficient head file reading
 async function headFile(filePath, numLines) {
   const fileHandle = await fs.open(filePath, 'r');
   try {
@@ -332,7 +355,7 @@ async function headFile(filePath, numLines) {
   }
 }
 
-// Enhanced find-and-replace with line-by-line matching (from index.ts)
+// Enhanced find-and-replace with line-by-line matching
 async function applyFileEdits(filePath, edits, dryRun = false) {
   // Read file content and normalize line endings
   const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
@@ -1611,7 +1634,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
       
-      // Search and intelligence tools (unchanged)
+      // Search and intelligence tools
       case "fast_find_file": {
         const results = searchFileIndex(args.file_path, args.limit || 10);
         if (results.length === 0) {
@@ -1872,6 +1895,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server
 async function runServer() {
+  // Verify workspace exists and is accessible
+  try {
+    console.error(`Git Workspace MCP Server starting...`);
+    console.error(`Workspace path: ${WORKSPACE_PATH}`);
+    
+    const stats = await fs.stat(WORKSPACE_PATH);
+    if (!stats.isDirectory()) {
+      console.error(`Error: Workspace path is not a directory: ${WORKSPACE_PATH}`);
+      process.exit(1);
+    }
+    console.error(`Workspace verified: ${WORKSPACE_PATH}`);
+  } catch (error) {
+    console.error(`Error accessing workspace directory ${WORKSPACE_PATH}:`, error);
+    process.exit(1);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("🚀 Git Workspace MCP Server running on stdio");
