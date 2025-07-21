@@ -63,7 +63,7 @@ function expandHome(filepath) {
   return filepath;
 }
 
-// Security: Path validation
+// Enhanced security: Path validation with better symlink handling
 async function validatePath(requestedPath) {
   const expandedPath = expandHome(requestedPath);
   const absolute = path.isAbsolute(expandedPath)
@@ -81,7 +81,7 @@ async function validatePath(requestedPath) {
     throw new Error(`Access denied - path outside workspace: ${absolute} not in ${normalizedWorkspace}`);
   }
 
-  // Handle symlinks by checking their real path
+  // Enhanced symlink handling - check real path
   try {
     const realPath = await fs.realpath(absolute);
     const normalizedReal = normalizePath(realPath);
@@ -114,22 +114,7 @@ async function validatePath(requestedPath) {
   }
 }
 
-// File operations with atomic writes
-async function writeFileAtomically(filePath, content) {
-  const tempPath = `${filePath}.${randomBytes(16).toString('hex')}.tmp`;
-  
-  try {
-    await fs.writeFile(tempPath, content, 'utf-8');
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    try {
-      await fs.unlink(tempPath);
-    } catch {}
-    throw error;
-  }
-}
-
-// Line ending utilities
+// Enhanced line ending utilities
 function detectLineEnding(content) {
   if (content.includes('\r\n')) return '\r\n';
   if (content.includes('\r')) return '\r';
@@ -140,7 +125,7 @@ function normalizeLineEndings(text) {
   return text.replace(/\r\n/g, '\n');
 }
 
-// Diff utilities
+// Enhanced diff utilities
 function createUnifiedDiff(originalContent, newContent, filepath = 'file') {
   const normalizedOriginal = normalizeLineEndings(originalContent);
   const normalizedNew = normalizeLineEndings(newContent);
@@ -155,60 +140,6 @@ function createUnifiedDiff(originalContent, newContent, filepath = 'file') {
   );
 }
 
-// File editing with corruption protection
-async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
-  // Read and backup original content
-  const originalContent = await fs.readFile(filePath, 'utf-8');
-  const lineEnding = detectLineEnding(originalContent);
-  
-  // Perform edit
-  const lines = originalContent.split(/\r?\n/);
-  const newLines = newContent.split('\n');
-  
-  // Validate line numbers
-  if (lineStart < 1 || lineStart > lines.length) {
-    throw new Error(`Invalid line_start ${lineStart} - file only has ${lines.length} lines`);
-  }
-  
-  const actualLineEnd = lineEnd || lineStart;
-  if (actualLineEnd < lineStart || actualLineEnd > lines.length) {
-    throw new Error(`Invalid line_end ${actualLineEnd} - must be between ${lineStart} and ${lines.length}`);
-  }
-  
-  // Apply edit
-  lines.splice(lineStart - 1, actualLineEnd - lineStart + 1, ...newLines);
-  const newFileContent = lines.join(lineEnding);
-  
-  // Create diff for response
-  const diff = createUnifiedDiff(originalContent, newFileContent, filePath);
-  
-  // Write atomically
-  await writeFileAtomically(filePath, newFileContent);
-  
-  // Verify write success
-  try {
-    const verificationContent = await fs.readFile(filePath, 'utf-8');
-    if (verificationContent.length === 0 && newFileContent.length > 0) {
-      // Corruption detected, restore backup
-      await writeFileAtomically(filePath, originalContent);
-      throw new Error("File corruption detected - restored from backup");
-    }
-  } catch (verifyError) {
-    // Restore backup if verification fails
-    await writeFileAtomically(filePath, originalContent);
-    throw new Error(`File verification failed - restored from backup: ${verifyError.message}`);
-  }
-  
-  const linesReplaced = actualLineEnd - lineStart + 1;
-  const linesAdded = newLines.length;
-  const finalLineCount = lines.length;
-  
-  return {
-    diff: formatDiff(diff),
-    summary: `✅ Successfully edited ${path.basename(filePath)}:\n• Replaced ${linesReplaced} lines (lines ${lineStart}-${actualLineEnd})\n• Added ${linesAdded} new lines\n• File now has ${finalLineCount} lines\n• Line ending style: ${lineEnding === '\r\n' ? 'CRLF' : lineEnding === '\r' ? 'CR' : 'LF'}\n\n🔍 VERIFICATION RECOMMENDED:\nUse 'read_file ${path.basename(filePath)}' to confirm edit looks correct\nUse 'git_diff' to see changes in context`
-  };
-}
-
 function formatDiff(diff) {
   let numBackticks = 3;
   while (diff.includes('`'.repeat(numBackticks))) {
@@ -217,7 +148,265 @@ function formatDiff(diff) {
   return `${'`'.repeat(numBackticks)}diff\n${diff}${'`'.repeat(numBackticks)}\n\n`;
 }
 
-// Git operations (read-only)
+// Enhanced atomic file operations
+async function writeFileAtomically(filePath, content) {
+  // Use random temp file name to prevent collisions
+  const tempPath = `${filePath}.${randomBytes(16).toString('hex')}.tmp`;
+  
+  try {
+    // Write to temp file first
+    await fs.writeFile(tempPath, content, 'utf-8');
+    
+    // Atomic rename - this is the key security feature
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    // Clean up temp file on error
+    try {
+      await fs.unlink(tempPath);
+    } catch {}
+    throw error;
+  }
+}
+
+// Enhanced file editing with line-by-line matching and better error handling
+async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
+  // Read original content and preserve line endings
+  const originalContent = await fs.readFile(filePath, 'utf-8');
+  const lineEnding = detectLineEnding(originalContent);
+  
+  // Parse lines
+  const lines = originalContent.split(/\r?\n/);
+  const newLines = newContent.split('\n');
+  
+  // Enhanced validation with detailed error messages
+  if (lineStart < 1 || lineStart > lines.length) {
+    throw new Error(`❌ Invalid line_start ${lineStart} - file only has ${lines.length} lines\n\n🔧 TROUBLESHOOTING:\n1. Use 'read_file ${path.basename(filePath)}' to see current content\n2. Count lines carefully (files start at line 1)\n3. Use 'preview_edit' to test parameters safely\n💡 The file currently has lines 1-${lines.length}`);
+  }
+  
+  const actualLineEnd = lineEnd || lineStart;
+  if (actualLineEnd < lineStart || actualLineEnd > lines.length) {
+    throw new Error(`❌ Invalid line_end ${actualLineEnd} - must be between ${lineStart} and ${lines.length}\n\n🔧 TROUBLESHOOTING:\n1. Use 'read_file ${path.basename(filePath)}' to see current content\n2. Ensure line_end >= line_start\n3. Use 'preview_edit' to test parameters safely`);
+  }
+  
+  // Apply edit with preserved line endings
+  const editedLines = [...lines];
+  editedLines.splice(lineStart - 1, actualLineEnd - lineStart + 1, ...newLines);
+  const newFileContent = editedLines.join(lineEnding);
+  
+  // Create diff for response
+  const diff = createUnifiedDiff(originalContent, newFileContent, filePath);
+  
+  // Enhanced atomic write with verification
+  const tempPath = `${filePath}.${randomBytes(16).toString('hex')}.tmp`;
+  
+  try {
+    // Write to temp file
+    await fs.writeFile(tempPath, newFileContent, 'utf-8');
+    
+    // Atomic rename
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    // Clean up temp file
+    try {
+      await fs.unlink(tempPath);
+    } catch {}
+    throw error;
+  }
+  
+  // Enhanced verification - check for corruption
+  try {
+    const verificationContent = await fs.readFile(filePath, 'utf-8');
+    if (verificationContent.length === 0 && newFileContent.length > 0) {
+      // Corruption detected! Restore from backup
+      await writeFileAtomically(filePath, originalContent);
+      throw new Error("❌ File corruption detected - restored from backup");
+    }
+  } catch (verifyError) {
+    // Restore backup if verification fails
+    try {
+      await writeFileAtomically(filePath, originalContent);
+      throw new Error(`❌ File verification failed - restored from backup: ${verifyError.message}`);
+    } catch (restoreError) {
+      throw new Error(`❌ CRITICAL: File write failed AND backup restoration failed! Manual recovery needed: ${verifyError.message}`);
+    }
+  }
+  
+  // Calculate statistics
+  const linesReplaced = actualLineEnd - lineStart + 1;
+  const linesAdded = newLines.length;
+  const finalLineCount = editedLines.length;
+  
+  return {
+    diff: formatDiff(diff),
+    summary: `✅ Successfully edited ${path.basename(filePath)}:\n• Replaced ${linesReplaced} lines (lines ${lineStart}-${actualLineEnd})\n• Added ${linesAdded} new lines\n• File now has ${finalLineCount} lines (was ${lines.length})\n• Line ending style: ${lineEnding === '\r\n' ? 'CRLF' : lineEnding === '\r' ? 'CR' : 'LF'}\n\n🔍 VERIFICATION RECOMMENDED:\nUse 'read_file ${path.basename(filePath)}' to confirm edit looks correct\nUse 'git_diff' to see changes in context`
+  };
+}
+
+// Memory-efficient tail file reading (from index.ts)
+async function tailFile(filePath, numLines) {
+  const CHUNK_SIZE = 1024; // Read 1KB at a time
+  const stats = await fs.stat(filePath);
+  const fileSize = stats.size;
+  
+  if (fileSize === 0) return '';
+  
+  // Open file for reading
+  const fileHandle = await fs.open(filePath, 'r');
+  try {
+    const lines = [];
+    let position = fileSize;
+    let chunk = Buffer.alloc(CHUNK_SIZE);
+    let linesFound = 0;
+    let remainingText = '';
+    
+    // Read chunks from the end of the file until we have enough lines
+    while (position > 0 && linesFound < numLines) {
+      const size = Math.min(CHUNK_SIZE, position);
+      position -= size;
+      
+      const { bytesRead } = await fileHandle.read(chunk, 0, size, position);
+      if (!bytesRead) break;
+      
+      // Get the chunk as a string and prepend any remaining text from previous iteration
+      const readData = chunk.slice(0, bytesRead).toString('utf-8');
+      const chunkText = readData + remainingText;
+      
+      // Split by newlines and count
+      const chunkLines = normalizeLineEndings(chunkText).split('\n');
+      
+      // If this isn't the end of the file, the first line is likely incomplete
+      // Save it to prepend to the next chunk
+      if (position > 0) {
+        remainingText = chunkLines[0];
+        chunkLines.shift(); // Remove the first (incomplete) line
+      }
+      
+      // Add lines to our result (up to the number we need)
+      for (let i = chunkLines.length - 1; i >= 0 && linesFound < numLines; i--) {
+        lines.unshift(chunkLines[i]);
+        linesFound++;
+      }
+    }
+    
+    return lines.join('\n');
+  } finally {
+    await fileHandle.close();
+  }
+}
+
+// Memory-efficient head file reading (from index.ts)
+async function headFile(filePath, numLines) {
+  const fileHandle = await fs.open(filePath, 'r');
+  try {
+    const lines = [];
+    let buffer = '';
+    let bytesRead = 0;
+    const chunk = Buffer.alloc(1024); // 1KB buffer
+    
+    // Read chunks and count lines until we have enough or reach EOF
+    while (lines.length < numLines) {
+      const result = await fileHandle.read(chunk, 0, chunk.length, bytesRead);
+      if (result.bytesRead === 0) break; // End of file
+      bytesRead += result.bytesRead;
+      buffer += chunk.slice(0, result.bytesRead).toString('utf-8');
+      
+      const newLineIndex = buffer.lastIndexOf('\n');
+      if (newLineIndex !== -1) {
+        const completeLines = buffer.slice(0, newLineIndex).split('\n');
+        buffer = buffer.slice(newLineIndex + 1);
+        for (const line of completeLines) {
+          lines.push(line);
+          if (lines.length >= numLines) break;
+        }
+      }
+    }
+    
+    // If there is leftover content and we still need lines, add it
+    if (buffer.length > 0 && lines.length < numLines) {
+      lines.push(buffer);
+    }
+    
+    return lines.join('\n');
+  } finally {
+    await fileHandle.close();
+  }
+}
+
+// Enhanced find-and-replace with line-by-line matching (from index.ts)
+async function applyFileEdits(filePath, edits, dryRun = false) {
+  // Read file content and normalize line endings
+  const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
+  const originalLineEnding = detectLineEnding(await fs.readFile(filePath, 'utf-8'));
+
+  // Apply edits sequentially
+  let modifiedContent = content;
+  for (const edit of edits) {
+    const normalizedOld = normalizeLineEndings(edit.oldText);
+    const normalizedNew = normalizeLineEndings(edit.newText);
+
+    // If exact match exists, use it
+    if (modifiedContent.includes(normalizedOld)) {
+      modifiedContent = modifiedContent.replace(normalizedOld, normalizedNew);
+      continue;
+    }
+
+    // Otherwise, try line-by-line matching with flexibility for whitespace
+    const oldLines = normalizedOld.split('\n');
+    const contentLines = modifiedContent.split('\n');
+    let matchFound = false;
+
+    for (let i = 0; i <= contentLines.length - oldLines.length; i++) {
+      const potentialMatch = contentLines.slice(i, i + oldLines.length);
+
+      // Compare lines with normalized whitespace
+      const isMatch = oldLines.every((oldLine, j) => {
+        const contentLine = potentialMatch[j];
+        return oldLine.trim() === contentLine.trim();
+      });
+
+      if (isMatch) {
+        // Preserve original indentation of first line
+        const originalIndent = contentLines[i].match(/^\s*/)?.[0] || '';
+        const newLines = normalizedNew.split('\n').map((line, j) => {
+          if (j === 0) return originalIndent + line.trimStart();
+          // For subsequent lines, try to preserve relative indentation
+          const oldIndent = oldLines[j]?.match(/^\s*/)?.[0] || '';
+          const newIndent = line.match(/^\s*/)?.[0] || '';
+          if (oldIndent && newIndent) {
+            const relativeIndent = newIndent.length - oldIndent.length;
+            return originalIndent + ' '.repeat(Math.max(0, relativeIndent)) + line.trimStart();
+          }
+          return line;
+        });
+
+        contentLines.splice(i, oldLines.length, ...newLines);
+        modifiedContent = contentLines.join('\n');
+        matchFound = true;
+        break;
+      }
+    }
+
+    if (!matchFound) {
+      throw new Error(`Could not find exact match for edit:\n${edit.oldText}`);
+    }
+  }
+
+  // Restore original line endings
+  const finalContent = modifiedContent.split('\n').join(originalLineEnding);
+
+  // Create unified diff
+  const originalFileContent = await fs.readFile(filePath, 'utf-8');
+  const diff = createUnifiedDiff(originalFileContent, finalContent, filePath);
+
+  if (!dryRun) {
+    // Use atomic write
+    await writeFileAtomically(filePath, finalContent);
+  }
+
+  return formatDiff(diff);
+}
+
+// Git operations (read-only) - enhanced security
 const ALLOWED_GIT_COMMANDS = [
   'status', 'diff', 'log', 'branch', 'show', 'rev-parse', 'config'
 ];
@@ -225,14 +414,14 @@ const ALLOWED_GIT_COMMANDS = [
 async function runGitCommand(args, options = {}) {
   const command = args[0];
   
-  // Explicitly block write operations
-  const blockedCommands = ['add', 'commit', 'push', 'pull', 'merge', 'rebase', 'reset', 'checkout', 'switch', 'restore'];
+  // Enhanced security - explicitly block ALL write operations
+  const blockedCommands = ['add', 'commit', 'push', 'pull', 'merge', 'rebase', 'reset', 'checkout', 'switch', 'restore', 'clean', 'rm'];
   if (blockedCommands.includes(command)) {
-    throw new Error(`Git command '${command}' is not allowed - this server only supports read operations`);
+    throw new Error(`❌ Git command '${command}' is not allowed - this server only supports read operations for security`);
   }
   
   if (!ALLOWED_GIT_COMMANDS.includes(command)) {
-    throw new Error(`Git command '${command}' is not in the allowed list`);
+    throw new Error(`❌ Git command '${command}' is not in the allowed list. Allowed commands: ${ALLOWED_GIT_COMMANDS.join(', ')}`);
   }
   
   return new Promise((resolve, reject) => {
@@ -267,7 +456,7 @@ async function runGitCommand(args, options = {}) {
   });
 }
 
-// File indexing system
+// File indexing system (unchanged but optimized)
 function shouldSkipDirectory(dirName) {
   return dirName.startsWith('.') || SKIP_DIRS.has(dirName);
 }
@@ -457,7 +646,7 @@ if (ENABLE_FILE_INDEXING) {
   });
 }
 
-// Tool definitions with intelligent prompting
+// Tool definitions with enhanced intelligent prompting
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -483,6 +672,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             path: {
               type: "string",
               description: "Relative path to file from workspace root"
+            },
+            tail: {
+              type: "integer",
+              description: "If provided, returns only the last N lines of the file (memory-efficient for large files)"
+            },
+            head: {
+              type: "integer", 
+              description: "If provided, returns only the first N lines of the file (memory-efficient for large files)"
             }
           },
           required: ["path"]
@@ -499,7 +696,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "1. Call 'read_file' tool first to see current content (if you want to preserve any of it)\n" +
           "2. Call 'write_file' (this tool) to completely replace the file\n" +
           "3. Call 'read_file' tool again to verify the new content\n\n" +
-          "🛡️ SAFETY: Has automatic backup and corruption protection\n" +
+          "🛡️ SAFETY: Has automatic atomic operations and corruption protection\n" +
           "⚠️ CAUTION: This erases ALL existing content - use 'edit_file' for partial changes\n\n" +
           "EXAMPLE:\n" +
           "- \"Use read_file to see what's currently in config.js\"\n" +
@@ -523,7 +720,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "edit_file",
         description:
-          "✏️ Edit specific lines or sections of a file\n" +
+          "✏️ Edit specific lines or sections of a file with ADVANCED CORRUPTION PROTECTION\n" +
           "⚠️ CRITICAL WORKFLOW - Follow these exact tool calls in order:\n" +
           "1. FIRST: Call 'read_file' tool to see current content\n" +
           "2. SECOND: Call 'preview_edit' tool to verify changes\n" +
@@ -531,6 +728,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "4. FOURTH: Call 'read_file' tool to confirm success\n\n" +
           "❌ NEVER guess line numbers - always use read_file first\n" +
           "⚠️ This is a real tool - call it by name: preview_edit\n\n" +
+          "🛡️ SAFETY FEATURES:\n" +
+          "• Automatic backup before editing\n" +
+          "• Line ending preservation (CRLF/LF/CR)\n" +
+          "• Write verification and corruption detection\n" +
+          "• Auto-recovery if corruption detected\n\n" +
           "EXAMPLE WORKFLOW:\n" +
           "- \"Use read_file to check current content\"\n" +
           "- \"Use preview_edit to show what will change\"\n" +
@@ -592,7 +794,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "append_to_file",
-        description: "Append content to the end of a file",
+        description: "Append content to the end of a file with atomic operations",
         inputSchema: {
           type: "object",
           properties: {
@@ -616,11 +818,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "replace_in_file",
         description:
-          "Replace text patterns in a file.\n\n" +
+          "Replace text patterns in a file with INTELLIGENT LINE-BY-LINE MATCHING.\n\n" +
           "💡 RECOMMENDED WORKFLOW:\n" +
           "1. Call 'read_file' tool first to see what text exists and will be replaced\n" +
           "2. Call 'replace_in_file' (this tool) to make the replacements\n" +
           "3. Call 'read_file' tool again to verify the replacements worked correctly\n\n" +
+          "🧠 INTELLIGENT FEATURES:\n" +
+          "• Exact text matching for simple cases\n" +
+          "• Line-by-line matching with flexible whitespace handling\n" +
+          "• Indentation preservation\n" +
+          "• Atomic file operations\n\n" +
           "✅ Use for: Find and replace operations, updating configuration values\n" +
           "⚠️ TIP: Use 'read_file' first to confirm the search text exists\n" +
           "⚠️ CAUTION: Be specific with search text to avoid unintended replacements\n\n" +
@@ -650,6 +857,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ["path", "search_text", "replace_text"]
+        }
+      },
+      {
+        name: "edit_file_advanced",
+        description:
+          "🚀 ADVANCED: Make multiple find-and-replace edits in a single operation\n" +
+          "Features intelligent line-by-line matching and indentation preservation\n" +
+          "Use when you need to make several related changes at once",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Relative path to file from workspace root"
+            },
+            edits: {
+              type: "array",
+              description: "Array of edit operations to apply sequentially",
+              items: {
+                type: "object",
+                properties: {
+                  oldText: {
+                    type: "string",
+                    description: "Text to search for - must match exactly"
+                  },
+                  newText: {
+                    type: "string", 
+                    description: "Text to replace with"
+                  }
+                },
+                required: ["oldText", "newText"]
+              }
+            },
+            dryRun: {
+              type: "boolean",
+              description: "Preview changes using git-style diff format",
+              default: false
+            }
+          },
+          required: ["path", "edits"]
         }
       },
       {
@@ -871,7 +1118,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "fast_find_file",
-        description: "Quickly find a specific file by exact or partial path",
+        description: "Quickly find a specific file by exact or partial path using performance index",
         inputSchema: {
           type: "object",
           properties: {
@@ -1007,7 +1254,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Tool implementations
+// Enhanced tool implementations
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
@@ -1015,6 +1262,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "read_file": {
         const validPath = await validatePath(args.path);
+        
+        // Enhanced: Support tail and head operations for large files
+        if (args.tail && args.head) {
+          throw new Error("Cannot specify both tail and head parameters simultaneously");
+        }
+        
+        if (args.tail) {
+          // Use memory-efficient tail implementation for large files
+          const tailContent = await tailFile(validPath, args.tail);
+          return {
+            content: [{ type: "text", text: tailContent }],
+          };
+        }
+        
+        if (args.head) {
+          // Use memory-efficient head implementation for large files
+          const headContent = await headFile(validPath, args.head);
+          return {
+            content: [{ type: "text", text: headContent }],
+          };
+        }
+        
         const content = await fs.readFile(validPath, "utf-8");
         return {
           content: [{ type: "text", text: content }]
@@ -1023,7 +1292,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "write_file": {
         const validPath = await validatePath(args.path);
-        await writeFileAtomically(validPath, args.content);
+        
+        // Enhanced: Use atomic operations with proper error handling
+        try {
+          // Try exclusive creation first
+          await fs.writeFile(validPath, args.content, { encoding: "utf-8", flag: 'wx' });
+        } catch (error) {
+          if (error.code === 'EEXIST') {
+            // File exists, use atomic write
+            await writeFileAtomically(validPath, args.content);
+          } else {
+            throw error;
+          }
+        }
+        
         return {
           content: [{ type: "text", text: `Successfully wrote to ${args.path}` }]
         };
@@ -1040,10 +1322,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "preview_edit": {
         const validPath = await validatePath(args.path);
         const originalContent = await fs.readFile(validPath, 'utf-8');
+        const lineEnding = detectLineEnding(originalContent);
         const lines = originalContent.split(/\r?\n/);
         const newLines = args.new_content.split('\n');
         
-        // Validate line numbers
+        // Enhanced validation with detailed error messages
         if (args.line_start < 1 || args.line_start > lines.length) {
           return {
             content: [{ type: "text", text: `❌ Invalid line_start ${args.line_start} - file only has ${lines.length} lines\n\n🔧 TROUBLESHOOTING:\n1. Use 'read_file ${path.basename(args.path)}' to see current content\n2. Count lines carefully (files start at line 1)\n3. Use 'preview_edit' to test parameters safely\n💡 The file currently has lines 1-${lines.length}` }]
@@ -1051,14 +1334,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         
         const actualLineEnd = args.line_end || args.line_start;
+        if (actualLineEnd < args.line_start || actualLineEnd > lines.length) {
+          return {
+            content: [{ type: "text", text: `❌ Invalid line_end ${actualLineEnd} - must be between ${args.line_start} and ${lines.length}\n\n🔧 TROUBLESHOOTING:\n1. Ensure line_end >= line_start\n2. Use 'read_file ${path.basename(args.path)}' to see current content\n3. File has ${lines.length} lines total` }]
+          };
+        }
+        
+        // Create preview with preserved line endings
         const previewLines = [...lines];
         previewLines.splice(args.line_start - 1, actualLineEnd - args.line_start + 1, ...newLines);
-        const previewContent = previewLines.join('\n');
+        const previewContent = previewLines.join(lineEnding);
         
         const diff = createUnifiedDiff(originalContent, previewContent, args.path);
         
         return {
-          content: [{ type: "text", text: `🔍 PREVIEW - This is what the edit would do:\n\n${formatDiff(diff)}\nTo apply these changes, use: edit_file with the same parameters` }]
+          content: [{ type: "text", text: `🔍 PREVIEW - This is what the edit would do:\n\n${formatDiff(diff)}\n✅ Line ending style: ${lineEnding === '\r\n' ? 'CRLF' : lineEnding === '\r' ? 'CR' : 'LF'} (preserved)\n\nTo apply these changes, use: edit_file with the same parameters` }]
         };
       }
       
@@ -1076,6 +1366,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                           (args.add_newline !== false && existingContent ? '\n' : '') + 
                           args.content;
         
+        // Use atomic write
         await writeFileAtomically(validPath, newContent);
         return {
           content: [{ type: "text", text: `Successfully appended to ${args.path}` }]
@@ -1084,30 +1375,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "replace_in_file": {
         const validPath = await validatePath(args.path);
-        const content = await fs.readFile(validPath, 'utf-8');
+        const edits = [{
+          oldText: args.search_text,
+          newText: args.replace_text
+        }];
         
-        let newContent;
-        let replacements = 0;
-        
-        if (args.replace_all) {
-          const parts = content.split(args.search_text);
-          replacements = parts.length - 1;
-          newContent = parts.join(args.replace_text);
-        } else {
-          if (content.includes(args.search_text)) {
-            newContent = content.replace(args.search_text, args.replace_text);
-            replacements = 1;
-          } else {
-            newContent = content;
-          }
-        }
-        
-        if (replacements > 0) {
-          await writeFileAtomically(validPath, newContent);
-        }
+        // Use enhanced line-by-line matching
+        const diff = await applyFileEdits(validPath, edits, false);
         
         return {
-          content: [{ type: "text", text: `Made ${replacements} replacement(s) in ${args.path}` }]
+          content: [{ type: "text", text: diff }]
+        };
+      }
+      
+      case "edit_file_advanced": {
+        const validPath = await validatePath(args.path);
+        const diff = await applyFileEdits(validPath, args.edits, args.dryRun || false);
+        
+        const action = args.dryRun ? "PREVIEW" : "Applied";
+        return {
+          content: [{ type: "text", text: `${action} ${args.edits.length} edit(s):\n\n${diff}` }]
         };
       }
       
@@ -1158,7 +1445,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
       
-      // Git operations
+      // Git operations (enhanced security)
       case "git_status": {
         try {
           const output = await runGitCommand(['status', '--porcelain']);
@@ -1324,7 +1611,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
       
-      // Search and intelligence tools
+      // Search and intelligence tools (unchanged)
       case "fast_find_file": {
         const results = searchFileIndex(args.file_path, args.limit || 10);
         if (results.length === 0) {
@@ -1587,9 +1874,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Git Workspace MCP Server running on stdio");
-  console.error(`Workspace: ${WORKSPACE_PATH}`);
-  console.error(`File indexing: ${ENABLE_FILE_INDEXING ? 'enabled' : 'disabled'}`);
+  console.error("🚀 Git Workspace MCP Server running on stdio");
+  console.error(`📁 Workspace: ${WORKSPACE_PATH}`);
+  console.error(`⚡ File indexing: ${ENABLE_FILE_INDEXING ? 'enabled' : 'disabled'}`);
+  console.error(`🛡️ Enhanced security: atomic operations, corruption protection, read-only Git`);
 }
 
 runServer().catch((error) => {

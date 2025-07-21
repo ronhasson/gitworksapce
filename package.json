@@ -10,11 +10,10 @@
     "dev": "node --inspect server/index.js",
     "build": "echo \"No build process required for pure Node.js extension\"",
     "validate": "node --input-type=module -e \"import {readFileSync} from 'fs'; JSON.parse(readFileSync('manifest.json', 'utf8')); console.log('✅ Manifest is valid JSON');\"",
-    "package": "zip -r git-workspace-v1.0.0.dxt . -x 'node_modules/*' '.git/*' '*.dxt'",
-    "package-win": "powershell -Command \"Compress-Archive -Path 'manifest.json','server','package.json','README.md','LICENSE','icon.svg' -DestinationPath 'git-workspace-v1.0.0.dxt' -Force\"",
+    "package": "zip -r git-workspace-v1.0.0.dxt manifest.json server/ package.json README.md LICENSE icon.svg -x '.git/*' '*.dxt'",
     "clean": "rm -f *.dxt",
     "inspect": "npx @modelcontextprotocol/inspector node server/index.js",
-    "help": "echo '📚 Available commands:' && echo '  npm run start        - Start the MCP server' && echo '  npm run dev          - Start with debugging' && echo '  npm run validate     - Validate manifest.json' && echo '  npm run package      - Create .dxt file (Unix/macOS)' && echo '  npm run package-win  - Create .dxt file (Windows)' && echo '  npm run inspect      - Debug with MCP inspector' && echo '  npm run clean        - Remove .dxt files'"
+    "help": "echo '📚 Available commands:' && echo '  npm run start     - Start the MCP server' && echo '  npm run dev       - Start with debugging' && echo '  npm run validate  - Validate manifest.json' && echo '  npm run package   - Create .dxt file' && echo '  npm run inspect   - Debug with MCP inspector'"
   },
   "keywords": [
     "mcp",

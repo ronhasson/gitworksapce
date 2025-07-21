@@ -3,8 +3,8 @@
   "name": "Git Workspace",
   "display_name": "Git Workspace MCP Server",
   "version": "1.0.0",
-  "description": "Intelligent Git workspace management with AI-guided file operations, read-only Git integration, and performance-optimized file indexing.",
-  "long_description": "A comprehensive MCP server that provides AI assistants with secure, intelligent access to Git repositories. Features include atomic file operations, intelligent workflow guidance, fast file indexing, read-only Git operations, and comprehensive security validation. Designed to prevent file corruption and guide LLMs toward safe editing practices while maintaining high performance even on large projects.",
+  "description": "Intelligent Git workspace management with AI-guided file operations, advanced corruption protection, and performance-optimized file indexing.",
+  "long_description": "A comprehensive MCP server that provides AI assistants with secure, intelligent access to Git repositories. Features include atomic file operations with corruption protection, intelligent workflow guidance, fast file indexing, read-only Git operations, memory-efficient file handling, and comprehensive security validation. Enhanced with line-by-line matching, indentation preservation, and automatic backup/recovery systems.",
   "author": {
     "name": "Ron Hasson",
     "email": "ron@example.com"
@@ -73,12 +73,14 @@
     }
   },
   "features": [
-    "Intelligent file editing workflow that prevents line number guessing",
+    "Intelligent file editing workflow with advanced corruption protection",
+    "Memory-efficient file operations with tail/head support for large files",
+    "Line-by-line matching with indentation preservation for find/replace",
     "Performance-optimized file indexing with smart directory filtering", 
     "Read-only Git operations for safe repository analysis",
-    "Automatic backup and corruption protection during file edits",
-    "Comprehensive error handling with recovery guidance",
-    "Cross-platform compatibility (Windows, macOS, Linux)"
+    "Automatic backup and recovery with write verification",
+    "Comprehensive error handling with detailed recovery guidance",
+    "Cross-platform compatibility with proper line ending preservation"
   ],
   "security": {
     "file_access": "restricted_to_configured_directory",
@@ -108,7 +110,11 @@
     },
     {
       "name": "replace_in_file", 
-      "description": "Find and replace text in files"
+      "description": "Find and replace text with intelligent line matching"
+    },
+    {
+      "name": "edit_file_advanced",
+      "description": "Make multiple find-and-replace edits with indentation preservation"
     },
     {
       "name": "list_files",

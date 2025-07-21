@@ -2,6 +2,8 @@
 
 A comprehensive Desktop Extension (DXT) that provides AI assistants with intelligent, secure access to Git repositories. This extension combines the robustness of the official filesystem MCP server with advanced Git integration and workflow intelligence.
 
+**Enhanced with advanced corruption protection, memory-efficient operations, and intelligent line-by-line matching.**
+
 ## 🎯 **Key Features**
 
 ### **🔒 Security First**
@@ -22,15 +24,23 @@ A comprehensive Desktop Extension (DXT) that provides AI assistants with intelli
 - **Memory Efficient**: Optimized for both older laptops and modern workstations
 - **Smart Directory Skipping**: Automatically filters out build/dependency directories
 
+### **🔬 Advanced Features** 
+- **Memory-Efficient File Operations**: Tail/head support for large files without loading entire content
+- **Intelligent Line Matching**: Line-by-line matching with flexible whitespace handling
+- **Indentation Preservation**: Maintains code formatting during find/replace operations
+- **Write Verification**: Automatic corruption detection with backup restoration
+- **Line Ending Preservation**: Properly handles CRLF, LF, and CR across platforms
+
 ## 🛠️ **Complete Tool Set**
 
 ### **File Operations**
-- `read_file` - Read file contents with intelligent workflow guidance
+- `read_file` - Read file contents with intelligent workflow guidance (supports tail/head for large files)
 - `write_file` - Atomic file writing with corruption protection
 - `edit_file` - Line-based editing with diff preview and verification
 - `preview_edit` - Preview changes before applying (prevents mistakes)
 - `append_to_file` - Safely append content to files
-- `replace_in_file` - Find and replace with safety checks
+- `replace_in_file` - Find and replace with intelligent line-by-line matching
+- `edit_file_advanced` - Multiple find-and-replace operations with indentation preservation
 
 ### **Git Operations (Read-Only)**
 - `git_status` - Show working tree status
