@@ -1,0 +1,1 @@
+// Line ending detection/normalization
