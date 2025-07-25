@@ -149,7 +149,7 @@ Extract each tool implementation to its own file under the appropriate category:
 
 1. ✅ Create the directory structure first
 2. ✅ Extract constants and configuration
-3. Extract utility functions
+3. ✅ Extract utility functions
 4. Extract file indexing system
 5. Extract tool definitions to separate files
 6. Extract tool implementations

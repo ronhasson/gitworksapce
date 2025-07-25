@@ -50,6 +50,21 @@ import {
   PERFORMANCE_LIMITS
 } from './constants.js';
 
+// Import utility functions
+import {
+  validatePath,
+  detectLineEnding,
+  normalizeLineEndings,
+  createUnifiedDiff,
+  formatDiff,
+  writeFileAtomically,
+  tailFile,
+  headFile,
+  applyFileEdits,
+  runGitCommand,
+  debugLog
+} from './utils/index.js';
+
 // Extract config values for easier access
 const { 
   WORKSPACE_PATH, 
@@ -63,128 +78,15 @@ const {
 let fileIndex = new Map();
 let indexLastBuilt = null;
 
-function debugLog(...args) {
-  if (DEBUG_MODE) {
-    console.error('[DEBUG]', ...args);
-  }
-}
+// debugLog function now imported from utils/logger.js
 
-// Utility functions
-function normalizePath(p) {
-  return path.normalize(p);
-}
+// Path utility functions now imported from utils/path.js
 
-function expandHome(filepath) {
-  if (filepath.startsWith('~/') || filepath === '~') {
-    return path.join(os.homedir(), filepath.slice(1));
-  }
-  return filepath;
-}
+// Line ending utility functions now imported from utils/line-ending.js
 
-// Enhanced security: Path validation with better symlink handling
-async function validatePath(requestedPath) {
-  const expandedPath = expandHome(requestedPath);
-  const absolute = path.isAbsolute(expandedPath)
-    ? path.resolve(expandedPath)
-    : path.resolve(WORKSPACE_PATH, expandedPath);
+// Diff utility functions now imported from utils/diff.js
 
-  const normalizedRequested = normalizePath(absolute);
-  const normalizedWorkspace = normalizePath(path.resolve(WORKSPACE_PATH));
-
-  // Check if path is within workspace
-  const relativePath = path.relative(normalizedWorkspace, normalizedRequested);
-  const isWithin = !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
-  
-  if (!isWithin) {
-    throw new Error(`Access denied - path outside workspace: ${absolute} not in ${normalizedWorkspace}`);
-  }
-
-  // Enhanced symlink handling - check real path
-  try {
-    const realPath = await fs.realpath(absolute);
-    const normalizedReal = normalizePath(realPath);
-    const realRelativePath = path.relative(normalizedWorkspace, normalizedReal);
-    const realIsWithin = !realRelativePath.startsWith('..') && !path.isAbsolute(realRelativePath);
-    
-    if (!realIsWithin) {
-      throw new Error(`Access denied - symlink target outside workspace: ${realPath} not in ${normalizedWorkspace}`);
-    }
-    return realPath;
-  } catch (error) {
-    // For new files that don't exist yet, verify parent directory
-    if (error.code === 'ENOENT') {
-      const parentDir = path.dirname(absolute);
-      try {
-        const realParentPath = await fs.realpath(parentDir);
-        const normalizedParent = normalizePath(realParentPath);
-        const parentRelativePath = path.relative(normalizedWorkspace, normalizedParent);
-        const parentIsWithin = !parentRelativePath.startsWith('..') && !path.isAbsolute(parentRelativePath);
-        
-        if (!parentIsWithin) {
-          throw new Error(`Access denied - parent directory outside workspace: ${realParentPath} not in ${normalizedWorkspace}`);
-        }
-        return absolute;
-      } catch {
-        throw new Error(`Parent directory does not exist: ${parentDir}`);
-      }
-    }
-    throw error;
-  }
-}
-
-// Enhanced line ending utilities
-function detectLineEnding(content) {
-  if (content.includes('\r\n')) return '\r\n';
-  if (content.includes('\r')) return '\r';
-  return '\n';
-}
-
-function normalizeLineEndings(text) {
-  return text.replace(/\r\n/g, '\n');
-}
-
-// Enhanced diff utilities
-function createUnifiedDiff(originalContent, newContent, filepath = 'file') {
-  const normalizedOriginal = normalizeLineEndings(originalContent);
-  const normalizedNew = normalizeLineEndings(newContent);
-
-  return createTwoFilesPatch(
-    filepath,
-    filepath,
-    normalizedOriginal,
-    normalizedNew,
-    'original',
-    'modified'
-  );
-}
-
-function formatDiff(diff) {
-  let numBackticks = 3;
-  while (diff.includes('`'.repeat(numBackticks))) {
-    numBackticks++;
-  }
-  return `${'`'.repeat(numBackticks)}diff\n${diff}${'`'.repeat(numBackticks)}\n\n`;
-}
-
-// Enhanced atomic file operations
-async function writeFileAtomically(filePath, content) {
-  // Use random temp file name to prevent collisions
-  const tempPath = `${filePath}.${randomBytes(16).toString('hex')}.tmp`;
-  
-  try {
-    // Write to temp file first
-    await fs.writeFile(tempPath, content, 'utf-8');
-    
-    // Atomic rename - this is the key security feature
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    // Clean up temp file on error
-    try {
-      await fs.unlink(tempPath);
-    } catch {}
-    throw error;
-  }
-}
+// File operation utility functions now imported from utils/file.js
 
 // Enhanced file editing with line-by-line matching and better error handling
 async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
@@ -260,216 +162,7 @@ async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
   };
 }
 
-// Memory-efficient tail file reading
-async function tailFile(filePath, numLines) {
-  const CHUNK_SIZE = PERFORMANCE_LIMITS.CHUNK_SIZE; // Read chunks at a time
-  const stats = await fs.stat(filePath);
-  const fileSize = stats.size;
-  
-  if (fileSize === 0) return '';
-  
-  // Open file for reading
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const lines = [];
-    let position = fileSize;
-    let chunk = Buffer.alloc(CHUNK_SIZE);
-    let linesFound = 0;
-    let remainingText = '';
-    
-    // Read chunks from the end of the file until we have enough lines
-    while (position > 0 && linesFound < numLines) {
-      const size = Math.min(CHUNK_SIZE, position);
-      position -= size;
-      
-      const { bytesRead } = await fileHandle.read(chunk, 0, size, position);
-      if (!bytesRead) break;
-      
-      // Get the chunk as a string and prepend any remaining text from previous iteration
-      const readData = chunk.slice(0, bytesRead).toString('utf-8');
-      const chunkText = readData + remainingText;
-      
-      // Split by newlines and count
-      const chunkLines = normalizeLineEndings(chunkText).split('\n');
-      
-      // If this isn't the end of the file, the first line is likely incomplete
-      // Save it to prepend to the next chunk
-      if (position > 0) {
-        remainingText = chunkLines[0];
-        chunkLines.shift(); // Remove the first (incomplete) line
-      }
-      
-      // Add lines to our result (up to the number we need)
-      for (let i = chunkLines.length - 1; i >= 0 && linesFound < numLines; i--) {
-        lines.unshift(chunkLines[i]);
-        linesFound++;
-      }
-    }
-    
-    return lines.join('\n');
-  } finally {
-    await fileHandle.close();
-  }
-}
-
-// Memory-efficient head file reading
-async function headFile(filePath, numLines) {
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const lines = [];
-    let buffer = '';
-    let bytesRead = 0;
-    const chunk = Buffer.alloc(PERFORMANCE_LIMITS.CHUNK_SIZE); // Chunk buffer
-    
-    // Read chunks and count lines until we have enough or reach EOF
-    while (lines.length < numLines) {
-      const result = await fileHandle.read(chunk, 0, chunk.length, bytesRead);
-      if (result.bytesRead === 0) break; // End of file
-      bytesRead += result.bytesRead;
-      buffer += chunk.slice(0, result.bytesRead).toString('utf-8');
-      
-      const newLineIndex = buffer.lastIndexOf('\n');
-      if (newLineIndex !== -1) {
-        const completeLines = buffer.slice(0, newLineIndex).split('\n');
-        buffer = buffer.slice(newLineIndex + 1);
-        for (const line of completeLines) {
-          lines.push(line);
-          if (lines.length >= numLines) break;
-        }
-      }
-    }
-    
-    // If there is leftover content and we still need lines, add it
-    if (buffer.length > 0 && lines.length < numLines) {
-      lines.push(buffer);
-    }
-    
-    return lines.join('\n');
-  } finally {
-    await fileHandle.close();
-  }
-}
-
-// Enhanced find-and-replace with line-by-line matching
-async function applyFileEdits(filePath, edits, dryRun = false) {
-  // Read file content and normalize line endings
-  const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
-  const originalLineEnding = detectLineEnding(await fs.readFile(filePath, 'utf-8'));
-
-  // Apply edits sequentially
-  let modifiedContent = content;
-  for (const edit of edits) {
-    const normalizedOld = normalizeLineEndings(edit.oldText);
-    const normalizedNew = normalizeLineEndings(edit.newText);
-
-    // If exact match exists, use it
-    if (modifiedContent.includes(normalizedOld)) {
-      modifiedContent = modifiedContent.replace(normalizedOld, normalizedNew);
-      continue;
-    }
-
-    // Otherwise, try line-by-line matching with flexibility for whitespace
-    const oldLines = normalizedOld.split('\n');
-    const contentLines = modifiedContent.split('\n');
-    let matchFound = false;
-
-    for (let i = 0; i <= contentLines.length - oldLines.length; i++) {
-      const potentialMatch = contentLines.slice(i, i + oldLines.length);
-
-      // Compare lines with normalized whitespace
-      const isMatch = oldLines.every((oldLine, j) => {
-        const contentLine = potentialMatch[j];
-        return oldLine.trim() === contentLine.trim();
-      });
-
-      if (isMatch) {
-        // Preserve original indentation of first line
-        const originalIndent = contentLines[i].match(/^\s*/)?.[0] || '';
-        const newLines = normalizedNew.split('\n').map((line, j) => {
-          if (j === 0) return originalIndent + line.trimStart();
-          // For subsequent lines, try to preserve relative indentation
-          const oldIndent = oldLines[j]?.match(/^\s*/)?.[0] || '';
-          const newIndent = line.match(/^\s*/)?.[0] || '';
-          if (oldIndent && newIndent) {
-            const relativeIndent = newIndent.length - oldIndent.length;
-            return originalIndent + ' '.repeat(Math.max(0, relativeIndent)) + line.trimStart();
-          }
-          return line;
-        });
-
-        contentLines.splice(i, oldLines.length, ...newLines);
-        modifiedContent = contentLines.join('\n');
-        matchFound = true;
-        break;
-      }
-    }
-
-    if (!matchFound) {
-      throw new Error(`Could not find exact match for edit:\n${edit.oldText}`);
-    }
-  }
-
-  // Restore original line endings
-  const finalContent = modifiedContent.split('\n').join(originalLineEnding);
-
-  // Create unified diff
-  const originalFileContent = await fs.readFile(filePath, 'utf-8');
-  const diff = createUnifiedDiff(originalFileContent, finalContent, filePath);
-
-  if (!dryRun) {
-    // Use atomic write
-    await writeFileAtomically(filePath, finalContent);
-  }
-
-  return formatDiff(diff);
-}
-
-// Git operations are now configured in constants.js
-
-async function runGitCommand(args, options = {}) {
-  const command = args[0];
-  
-  // Enhanced security - explicitly block ALL write operations
-  const blockedCommands = ['add', 'commit', 'push', 'pull', 'merge', 'rebase', 'reset', 'checkout', 'switch', 'restore', 'clean', 'rm'];
-  if (blockedCommands.includes(command)) {
-    throw new Error(`❌ Git command '${command}' is not allowed - this server only supports read operations for security`);
-  }
-  
-  if (!ALLOWED_GIT_COMMANDS.includes(command)) {
-    throw new Error(`❌ Git command '${command}' is not in the allowed list. Allowed commands: ${ALLOWED_GIT_COMMANDS.join(', ')}`);
-  }
-  
-  return new Promise((resolve, reject) => {
-    const git = spawn('git', args, {
-      cwd: WORKSPACE_PATH,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      ...options
-    });
-    
-    let stdout = '';
-    let stderr = '';
-    
-    git.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    git.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-    
-    git.on('close', (code) => {
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(new Error(`Git command failed (exit code ${code}): ${stderr || stdout}`));
-      }
-    });
-    
-    git.on('error', (err) => {
-      reject(new Error(`Failed to run git command: ${err.message}`));
-    });
-  });
-}
+// Git utility functions now imported from utils/git.js
 
 // File indexing system (unchanged but optimized)
 function shouldSkipDirectory(dirName) {
@@ -1272,7 +965,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     switch (name) {
       case "read_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         
         // Enhanced: Support tail and head operations for large files
         if (args.tail && args.head) {
@@ -1302,7 +995,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "write_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         
         // Enhanced: Use atomic operations with proper error handling
         try {
@@ -1323,7 +1016,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "edit_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         const result = await editFileSafely(validPath, args.line_start, args.line_end, args.new_content);
         return {
           content: [{ type: "text", text: result.diff + result.summary }]
@@ -1331,7 +1024,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "preview_edit": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         const originalContent = await fs.readFile(validPath, 'utf-8');
         const lineEnding = detectLineEnding(originalContent);
         const lines = originalContent.split(/\r?\n/);
@@ -1364,7 +1057,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "append_to_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         let existingContent = '';
         
         try {
@@ -1385,7 +1078,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "replace_in_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         const edits = [{
           oldText: args.search_text,
           newText: args.replace_text
@@ -1400,7 +1093,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "edit_file_advanced": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         const diff = await applyFileEdits(validPath, args.edits, args.dryRun || false);
         
         const action = args.dryRun ? "PREVIEW" : "Applied";
@@ -1411,7 +1104,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "list_files": {
         const targetPath = args.path || ".";
-        const validPath = await validatePath(targetPath);
+        const validPath = await validatePath(targetPath, WORKSPACE_PATH);
         
         if (args.recursive) {
           const files = await collectFilesFiltered(validPath);
@@ -1432,7 +1125,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "create_directory": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         await fs.mkdir(validPath, { recursive: true });
         return {
           content: [{ type: "text", text: `Successfully created directory ${args.path}` }]
@@ -1440,7 +1133,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "delete_file": {
-        const validPath = await validatePath(args.path);
+        const validPath = await validatePath(args.path, WORKSPACE_PATH);
         const stats = await fs.stat(validPath);
         
         if (stats.isDirectory()) {
@@ -1459,7 +1152,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Git operations (enhanced security)
       case "git_status": {
         try {
-          const output = await runGitCommand(['status', '--porcelain']);
+          const output = await runGitCommand(['status', '--porcelain'], WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output || "Working tree clean" }]
           };
@@ -1477,7 +1170,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (args.staged) gitArgs.push('--cached');
           if (args.file_path) gitArgs.push(args.file_path);
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output || "No changes" }]
           };
@@ -1495,7 +1188,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (args.oneline) gitArgs.push('--oneline');
           if (args.limit) gitArgs.push(`-${args.limit}`);
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output }]
           };
@@ -1509,12 +1202,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "git_list_branches": {
         try {
-          const localOutput = await runGitCommand(['branch']);
+          const localOutput = await runGitCommand(['branch'], WORKSPACE_PATH);
           let result = "Local branches:\n" + localOutput;
           
           if (args.include_remote) {
             try {
-              const remoteOutput = await runGitCommand(['branch', '-r']);
+              const remoteOutput = await runGitCommand(['branch', '-r'], WORKSPACE_PATH);
               if (remoteOutput) {
                 result += "\n\nRemote branches:\n" + remoteOutput;
               }
@@ -1540,7 +1233,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (args.show_stats) gitArgs.push('--stat');
           if (args.file_path) gitArgs.push(args.file_path);
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output || `No differences between ${args.base_branch} and ${args.compare_branch || 'HEAD'}` }]
           };
@@ -1558,7 +1251,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (args.show_stats) gitArgs.push('--stat');
           if (args.file_path) gitArgs.push(args.file_path);
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output || `No differences between ${args.commit_from} and ${args.commit_to || 'HEAD'}` }]
           };
@@ -1576,7 +1269,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (!args.show_diff) gitArgs.push('--no-patch');
           gitArgs.push(args.commit_hash);
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output }]
           };
@@ -1590,8 +1283,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "git_current_branch": {
         try {
-          const branch = await runGitCommand(['rev-parse', '--abbrev-ref', 'HEAD']);
-          const lastCommit = await runGitCommand(['log', '-1', '--oneline']);
+          const branch = await runGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], WORKSPACE_PATH);
+          const lastCommit = await runGitCommand(['log', '-1', '--oneline'], WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: `Current branch: ${branch}\nLast commit: ${lastCommit}` }]
           };
@@ -1610,7 +1303,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (args.since) gitArgs.push(`--since="${args.since}"`);
           gitArgs.push('--oneline');
           
-          const output = await runGitCommand(gitArgs);
+          const output = await runGitCommand(gitArgs, WORKSPACE_PATH);
           return {
             content: [{ type: "text", text: output }]
           };
@@ -1739,7 +1432,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "analyze_code_quality": {
-        const validPath = await validatePath(args.file_path);
+        const validPath = await validatePath(args.file_path, WORKSPACE_PATH);
         const content = await fs.readFile(validPath, 'utf-8');
         const lines = content.split('\n');
         
