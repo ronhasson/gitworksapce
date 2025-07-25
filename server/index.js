@@ -65,6 +65,16 @@ import {
   debugLog
 } from './utils/index.js';
 
+// Import file index functions
+import { 
+  buildFileIndex, 
+  getFileIndex, 
+  getIndexLastBuilt, 
+  getFileIndexStats 
+} from './file-index/index.js';
+import { searchFileIndex } from './file-index/search.js';
+import { collectFilesFiltered, shouldSkipDirectory, shouldSkipFile } from './file-index/collect.js';
+
 // Extract config values for easier access
 const { 
   WORKSPACE_PATH, 
@@ -74,9 +84,7 @@ const {
   MAX_FILE_SIZE_BYTES 
 } = config;
 
-// File index for performance
-let fileIndex = new Map();
-let indexLastBuilt = null;
+// File index functions imported from file-index module
 
 // debugLog function now imported from utils/logger.js
 
@@ -164,171 +172,7 @@ async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
 
 // Git utility functions now imported from utils/git.js
 
-// File indexing system (unchanged but optimized)
-function shouldSkipDirectory(dirName) {
-  return dirName.startsWith('.') || SKIP_DIRS.has(dirName);
-}
-
-function shouldSkipFile(fileName) {
-  return fileName.startsWith('.') && 
-         !fileName.endsWith('.gitignore') && 
-         !fileName.endsWith('.env.example');
-}
-
-function getFilePriority(filePath, extension) {
-  const name = path.basename(filePath).toLowerCase();
-  
-  // Priority 1: Critical project files
-  if (PRIORITY_FILES.includes(name)) {
-    return FILE_PRIORITIES.CRITICAL;
-  }
-  
-  // Priority 2: Code files
-  if (FILE_EXTENSIONS.CODE.includes(extension)) {
-    return FILE_PRIORITIES.CODE;
-  }
-  
-  // Priority 3: Config files
-  if (FILE_EXTENSIONS.CONFIG.includes(extension)) {
-    return FILE_PRIORITIES.CONFIG;
-  }
-  
-  // Priority 4: Documentation
-  if (FILE_EXTENSIONS.DOCS.includes(extension)) {
-    return FILE_PRIORITIES.DOCS;
-  }
-  
-  // Priority 5: Other files
-  return FILE_PRIORITIES.OTHER;
-}
-
-async function collectFilesFiltered(currentPath) {
-  const files = [];
-  
-  async function walk(dirPath) {
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        
-        if (entry.isDirectory()) {
-          if (shouldSkipDirectory(entry.name)) {
-            continue;
-          }
-          await walk(fullPath);
-        } else if (entry.isFile()) {
-          if (shouldSkipFile(entry.name)) {
-            continue;
-          }
-          files.push(fullPath);
-        }
-      }
-    } catch (error) {
-      debugLog(`Cannot read directory ${dirPath}:`, error.message);
-    }
-  }
-  
-  await walk(currentPath);
-  return files;
-}
-
-async function buildFileIndex() {
-  if (!ENABLE_FILE_INDEXING) {
-    debugLog('File indexing disabled');
-    return;
-  }
-  
-  console.error("Building file index...");
-  const startTime = Date.now();
-  
-  try {
-    const allFiles = await collectFilesFiltered(WORKSPACE_PATH);
-    console.error(`Found ${allFiles.length} files to index`);
-    
-    fileIndex.clear();
-    let processed = 0;
-    
-    for (const filePath of allFiles) {
-      try {
-        const stats = await fs.stat(filePath);
-        if (stats.size > MAX_FILE_SIZE_BYTES) {
-          debugLog(`Skipping large file: ${filePath} (${stats.size} bytes)`);
-          continue;
-        }
-        
-        const relativePath = path.relative(WORKSPACE_PATH, filePath);
-        const extension = path.extname(filePath).toLowerCase();
-        
-        fileIndex.set(relativePath, {
-          path: relativePath,
-          name: path.basename(filePath),
-          size: stats.size,
-          modified: stats.mtime.getTime(),
-          priority: getFilePriority(filePath, extension),
-          extension
-        });
-        
-        processed++;
-        if (processed % PERFORMANCE_LIMITS.INDEX_PROGRESS_INTERVAL === 0) {
-          console.error(`Indexed ${processed}/${allFiles.length} files...`);
-        }
-      } catch (error) {
-        debugLog(`Error indexing ${filePath}:`, error.message);
-      }
-    }
-    
-    indexLastBuilt = new Date();
-    const duration = Date.now() - startTime;
-    console.error(`File index built: ${fileIndex.size} files indexed in ${duration}ms`);
-  } catch (error) {
-    console.error(`Error building file index: ${error.message}`);
-  }
-}
-
-// Search functions using index
-function searchFileIndex(query, limit = 10) {
-  if (!ENABLE_FILE_INDEXING || fileIndex.size === 0) {
-    return [];
-  }
-  
-  const results = [];
-  const queryLower = query.toLowerCase();
-  
-  for (const [, info] of fileIndex) {
-    let score = 0;
-    
-    // Exact path match
-    if (info.path.toLowerCase() === queryLower) {
-      score = 1000;
-    }
-    // Exact filename match
-    else if (info.name.toLowerCase() === queryLower) {
-      score = 900;
-    }
-    // Path contains query
-    else if (info.path.toLowerCase().includes(queryLower)) {
-      score = 500 + (100 - info.path.length); // Prefer shorter paths
-    }
-    // Filename contains query
-    else if (info.name.toLowerCase().includes(queryLower)) {
-      score = 400 + (50 - info.name.length); // Prefer shorter names
-    }
-    
-    if (score > 0) {
-      results.push({ ...info, score });
-    }
-  }
-  
-  // Sort by score (desc), then priority (asc), then name
-  results.sort((a, b) => {
-    if (a.score !== b.score) return b.score - a.score;
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    return a.name.localeCompare(b.name);
-  });
-  
-  return results.slice(0, limit).map(r => path.resolve(WORKSPACE_PATH, r.path));
-}
+// File indexing functions moved to file-index module
 
 // Server setup
 const server = new Server(
@@ -1356,6 +1200,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "search_content": {
+        const fileIndex = getFileIndex();
         const searchResults = [];
         let filesSearched = 0;
         const maxFiles = PERFORMANCE_LIMITS.MAX_SEARCH_FILES;
@@ -1466,6 +1311,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "find_todos_fixmes": {
+        const fileIndex = getFileIndex();
         const keywords = TODO_KEYWORDS;
         const results = [];
         let filesSearched = 0;
@@ -1515,9 +1361,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "refresh_file_index": {
+        const fileIndex = getFileIndex();
         const oldSize = fileIndex.size;
         await buildFileIndex();
-        const newSize = fileIndex.size;
+        const newSize = getFileIndex().size;
         
         return {
           content: [{ type: "text", text: `File index refreshed: ${oldSize} → ${newSize} files` }]
@@ -1531,17 +1378,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
         
-        const stats = {
-          totalFiles: fileIndex.size,
-          lastBuilt: indexLastBuilt ? indexLastBuilt.toISOString() : 'Never',
-          fileSizeDistribution: {}
-        };
-        
-        // Calculate file type distribution
-        for (const [, info] of fileIndex) {
-          const ext = info.extension || '(no extension)';
-          stats.fileSizeDistribution[ext] = (stats.fileSizeDistribution[ext] || 0) + 1;
-        }
+        const stats = getFileIndexStats();
         
         const result = [
           `File Index Statistics:`,
