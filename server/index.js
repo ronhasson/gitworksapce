@@ -38,31 +38,26 @@ import { diffLines, createTwoFilesPatch } from 'diff';
 
 console.error('✅ Dependencies loaded successfully');
 
-// Configuration from environment variables
-const WORKSPACE_PATH = process.env.WORKSPACE_PATH || process.cwd();
-const ENABLE_FILE_INDEXING = process.env.ENABLE_FILE_INDEXING !== 'false';
-const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '10');
-const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
+// Load configuration and constants
+import { config } from './config.js';
+import { 
+  SKIP_DIRS, 
+  ALLOWED_GIT_COMMANDS, 
+  FILE_EXTENSIONS,
+  PRIORITY_FILES,
+  FILE_PRIORITIES,
+  TODO_KEYWORDS,
+  PERFORMANCE_LIMITS
+} from './constants.js';
 
-// Performance-critical constants  
-const SKIP_DIRS = new Set([
-  // Dependencies
-  'node_modules', 'vendor', 'venv', 'env',
-  // Build outputs  
-  'dist', 'build', 'out', 'target', 'bin', 'obj',
-  // Framework/tool caches
-  '.next', '.nuxt', '__pycache__', '.pytest_cache', '.nyc_output',
-  // Version control
-  '.git', '.svn', '.hg',
-  // Editor/IDE
-  '.vscode', '.idea', '.vs',
-  // Logs and temp
-  'logs', 'log', 'tmp', 'temp', 'coverage',
-  // Other common outputs
-  'public/build', 'static/build', '.output', '.cache'
-]);
-
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+// Extract config values for easier access
+const { 
+  WORKSPACE_PATH, 
+  ENABLE_FILE_INDEXING, 
+  MAX_FILE_SIZE_MB, 
+  DEBUG_MODE, 
+  MAX_FILE_SIZE_BYTES 
+} = config;
 
 // File index for performance
 let fileIndex = new Map();
@@ -267,7 +262,7 @@ async function editFileSafely(filePath, lineStart, lineEnd, newContent) {
 
 // Memory-efficient tail file reading
 async function tailFile(filePath, numLines) {
-  const CHUNK_SIZE = 1024; // Read 1KB at a time
+  const CHUNK_SIZE = PERFORMANCE_LIMITS.CHUNK_SIZE; // Read chunks at a time
   const stats = await fs.stat(filePath);
   const fileSize = stats.size;
   
@@ -324,7 +319,7 @@ async function headFile(filePath, numLines) {
     const lines = [];
     let buffer = '';
     let bytesRead = 0;
-    const chunk = Buffer.alloc(1024); // 1KB buffer
+    const chunk = Buffer.alloc(PERFORMANCE_LIMITS.CHUNK_SIZE); // Chunk buffer
     
     // Read chunks and count lines until we have enough or reach EOF
     while (lines.length < numLines) {
@@ -429,10 +424,7 @@ async function applyFileEdits(filePath, edits, dryRun = false) {
   return formatDiff(diff);
 }
 
-// Git operations (read-only) - enhanced security
-const ALLOWED_GIT_COMMANDS = [
-  'status', 'diff', 'log', 'branch', 'show', 'rev-parse', 'config'
-];
+// Git operations are now configured in constants.js
 
 async function runGitCommand(args, options = {}) {
   const command = args[0];
@@ -494,31 +486,27 @@ function getFilePriority(filePath, extension) {
   const name = path.basename(filePath).toLowerCase();
   
   // Priority 1: Critical project files
-  if (['package.json', 'requirements.txt', 'dockerfile', 'makefile', 'readme.md'].includes(name)) {
-    return 1;
+  if (PRIORITY_FILES.includes(name)) {
+    return FILE_PRIORITIES.CRITICAL;
   }
   
   // Priority 2: Code files
-  const codeExtensions = ['.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', 
-                         '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt', '.scala'];
-  if (codeExtensions.includes(extension)) {
-    return 2;
+  if (FILE_EXTENSIONS.CODE.includes(extension)) {
+    return FILE_PRIORITIES.CODE;
   }
   
   // Priority 3: Config files
-  const configExtensions = ['.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf'];
-  if (configExtensions.includes(extension)) {
-    return 3;
+  if (FILE_EXTENSIONS.CONFIG.includes(extension)) {
+    return FILE_PRIORITIES.CONFIG;
   }
   
   // Priority 4: Documentation
-  const docExtensions = ['.md', '.txt', '.rst', '.adoc'];
-  if (docExtensions.includes(extension)) {
-    return 4;
+  if (FILE_EXTENSIONS.DOCS.includes(extension)) {
+    return FILE_PRIORITIES.DOCS;
   }
   
   // Priority 5: Other files
-  return 5;
+  return FILE_PRIORITIES.OTHER;
 }
 
 async function collectFilesFiltered(currentPath) {
@@ -589,7 +577,7 @@ async function buildFileIndex() {
         });
         
         processed++;
-        if (processed % 1000 === 0) {
+        if (processed % PERFORMANCE_LIMITS.INDEX_PROGRESS_INTERVAL === 0) {
           console.error(`Indexed ${processed}/${allFiles.length} files...`);
         }
       } catch (error) {
@@ -1152,7 +1140,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             limit: {
               type: "integer",
               description: "Maximum number of results to return",
-              default: 10
+              default: PERFORMANCE_LIMITS.MAX_FAST_FIND_RESULTS
             }
           },
           required: ["file_path"]
@@ -1636,7 +1624,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       // Search and intelligence tools
       case "fast_find_file": {
-        const results = searchFileIndex(args.file_path, args.limit || 10);
+        const results = searchFileIndex(args.file_path, args.limit || PERFORMANCE_LIMITS.MAX_FAST_FIND_RESULTS);
         if (results.length === 0) {
           return {
             content: [{ type: "text", text: "No files found matching the search criteria" }]
@@ -1677,8 +1665,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "search_content": {
         const searchResults = [];
         let filesSearched = 0;
-        const maxFiles = 20;
-        const maxMatchesPerFile = 5;
+        const maxFiles = PERFORMANCE_LIMITS.MAX_SEARCH_FILES;
+        const maxMatchesPerFile = PERFORMANCE_LIMITS.MAX_MATCHES_PER_FILE;
         
         for (const [relativePath, info] of fileIndex) {
           if (filesSearched >= maxFiles) break;
@@ -1785,10 +1773,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       case "find_todos_fixmes": {
-        const keywords = ['TODO', 'FIXME', 'HACK', 'NOTE', 'BUG', 'XXX'];
+        const keywords = TODO_KEYWORDS;
         const results = [];
         let filesSearched = 0;
-        const maxFiles = 200;
+        const maxFiles = PERFORMANCE_LIMITS.MAX_SEARCH_FILES;
         
         for (const [relativePath, info] of fileIndex) {
           if (filesSearched >= maxFiles) break;
