@@ -1,26 +1,12 @@
 // tools/index-management/index.js
-// Index management tool definitions
 
-export const refreshFileIndexDefinition = {
-  name: "refresh_file_index",
-  description: "Refresh the file index to include newly created files",
-  inputSchema: {
-    type: "object",
-    properties: {}
-  }
-};
+// Re-exports all index management tool implementations for convenient importing
+export { refreshFileIndex } from './refresh-file-index.js';
+export { fileIndexStats } from './file-index-stats.js';
 
-export const fileIndexStatsDefinition = {
-  name: "file_index_stats",
-  description: "Show file index statistics and status",
-  inputSchema: {
-    type: "object",
-    properties: {}
-  }
-};
-
-// Export all index management tool definitions
-export const indexManagementToolDefinitions = [
+// Re-exports all index management tool definitions
+export {
   refreshFileIndexDefinition,
-  fileIndexStatsDefinition
-];
+  fileIndexStatsDefinition,
+  indexManagementToolDefinitions
+} from './definitions.js';

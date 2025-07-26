@@ -30,6 +30,11 @@ export {
   applyFileEdits
 } from './file.js';
 
+// Edit utilities
+export {
+  editFileSafely
+} from './edit.js';
+
 // Git utilities
 export {
   runGitCommand
