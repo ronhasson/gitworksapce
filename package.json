@@ -8,9 +8,7 @@
     "start": "node server/index.js",
     "test": "echo \"No tests yet\" && exit 0",
     "dev": "node --inspect server/index.js",
-    "build": "echo \"No build process required for pure Node.js extension\"",
-    "validate": "node --input-type=module -e \"import {readFileSync} from 'fs'; JSON.parse(readFileSync('manifest.json', 'utf8')); console.log('✅ Manifest is valid JSON');\"",
-    "package": "zip -r git-workspace-v1.0.0.dxt manifest.json server/ package.json README.md LICENSE icon.svg -x '.git/*' '*.dxt'",
+    "pack": "npx @anthropic-ai/dxt pack",
     "clean": "rm -f *.dxt",
     "inspect": "npx @modelcontextprotocol/inspector node server/index.js",
     "help": "echo '📚 Available commands:' && echo '  npm run start     - Start the MCP server' && echo '  npm run dev       - Start with debugging' && echo '  npm run validate  - Validate manifest.json' && echo '  npm run package   - Create .dxt file' && echo '  npm run inspect   - Debug with MCP inspector'"
